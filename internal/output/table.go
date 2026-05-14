@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/example/go-homelabctl/internal/proxmox"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/proxmox"
 )
 
 func WriteLXCTable(w io.Writer, items []proxmox.LXCContainer) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/example/go-homelabctl/internal/app"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/app"
 )
 
 func main() {

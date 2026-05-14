@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/example/go-homelabctl/internal/proxmox"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/proxmox"
 )
 
 func TestJSONOutput(t *testing.T) {

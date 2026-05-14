@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 
-	"github.com/example/go-homelabctl/internal/config"
-	"github.com/example/go-homelabctl/internal/output"
-	"github.com/example/go-homelabctl/internal/proxmox"
-	"github.com/example/go-homelabctl/internal/sshx"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/config"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/output"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/proxmox"
+	"github.com/bartlomiejnoszka/go-homelabctl/internal/sshx"
 	"github.com/spf13/cobra"
 )
 

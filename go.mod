@@ -1,4 +1,4 @@
-module github.com/example/go-homelabctl
+module github.com/bartlomiejnoszka/go-homelabctl
 
 go 1.23.0
 
