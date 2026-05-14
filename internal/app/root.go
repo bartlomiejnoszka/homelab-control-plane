@@ -32,11 +32,7 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 			runner := sshx.NewSSHRunner(cfg.Proxmox.Host, cfg.Proxmox.Port, cfg.Proxmox.User, cfg.Proxmox.PrivateKey, cfg.Proxmox.Timeout)
-			stdout, err := runner.Run(context.Background(), "pct list")
-			if err != nil {
-				return err
-			}
-			containers, err := proxmox.ParsePCTList(stdout)
+			containers, err := proxmox.ListLXC(context.Background(), runner)
 			if err != nil {
 				return err
 			}
