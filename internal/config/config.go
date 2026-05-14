@@ -16,10 +16,14 @@ const (
 	defaultTimeout = 5 * time.Second
 )
 
+// Config is the root YAML document shape.
+// In PHP terms, it is a small DTO filled from config.yaml.
 type Config struct {
 	Proxmox ProxmoxConfig `yaml:"proxmox"`
 }
 
+// ProxmoxConfig contains the SSH settings needed to talk to a Proxmox node.
+// The yaml tags are like Symfony Serializer field names.
 type ProxmoxConfig struct {
 	Host           string        `yaml:"host"`
 	Port           int           `yaml:"port"`
@@ -29,6 +33,7 @@ type ProxmoxConfig struct {
 	Timeout        time.Duration `yaml:"-"`
 }
 
+// DefaultPath returns ~/.config/homelabctl/config.yaml for the current user.
 func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -37,6 +42,8 @@ func DefaultPath() (string, error) {
 	return filepath.Join(home, ".config", "homelabctl", "config.yaml"), nil
 }
 
+// Load reads YAML config, applies defaults, validates required fields, and
+// returns a pointer to the ready-to-use Config.
 func Load(path string) (*Config, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, errors.New("config path is required")

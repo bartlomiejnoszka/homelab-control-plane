@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewRootCmd builds the Cobra command tree for the CLI.
+// In Symfony terms, this is similar to wiring console commands in one place.
 func NewRootCmd() *cobra.Command {
 	var configPath string
 	defPath, _ := config.DefaultPath()

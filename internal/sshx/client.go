@@ -9,10 +9,13 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// Runner is the small interface needed by code that executes remote commands.
+// Keeping it tiny makes tests easy because a fake can implement one method.
 type Runner interface {
 	Run(ctx context.Context, command string) (string, error)
 }
 
+// SSHRunner executes commands over SSH using private-key authentication.
 type SSHRunner struct {
 	host       string
 	port       int
@@ -22,10 +25,14 @@ type SSHRunner struct {
 	dialerFunc func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error)
 }
 
+// NewSSHRunner constructs an SSH-backed Runner.
+// In PHP terms, this is a factory function instead of a service container.
 func NewSSHRunner(host string, port int, user, keyPath string, timeout time.Duration) *SSHRunner {
 	return &SSHRunner{host: host, port: port, user: user, keyPath: keyPath, timeout: timeout, dialerFunc: ssh.Dial}
 }
 
+// Run connects to the remote host, executes command, and returns stdout/stderr
+// combined as a string when the command succeeds.
 func (r *SSHRunner) Run(ctx context.Context, command string) (string, error) {
 	signer, err := signerFromPrivateKey(r.keyPath)
 	if err != nil {

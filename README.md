@@ -75,3 +75,7 @@ go run ./cmd/homelabctl --help
 go run ./cmd/homelabctl --config ./config.yaml lxc list
 go test ./...
 ```
+
+## Learning Go
+
+For a PHP/Symfony-oriented walkthrough of the codebase, see [docs/go-for-php-developers.md](docs/go-for-php-developers.md).

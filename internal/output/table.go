@@ -9,6 +9,8 @@ import (
 	"github.com/bartlomiejnoszka/go-homelabctl/internal/proxmox"
 )
 
+// WriteLXCTable renders LXC containers as a tab-aligned text table.
+// This is presentation code; it does not know how containers were fetched.
 func WriteLXCTable(w io.Writer, items []proxmox.LXCContainer) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "VMID\tSTATUS\tNAME\tMEMORY\tBOOTDISK\tFREE\tUSE%\tIP\tPID")

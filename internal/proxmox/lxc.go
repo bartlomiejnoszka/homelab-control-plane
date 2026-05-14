@@ -8,10 +8,13 @@ import (
 	"strings"
 )
 
+// Runner is the command execution capability required by the Proxmox package.
+// sshx.SSHRunner satisfies it, and tests can provide a fake implementation.
 type Runner interface {
 	Run(ctx context.Context, command string) (string, error)
 }
 
+// LXCContainer is the normalized container data shown by table and JSON output.
 type LXCContainer struct {
 	VMID                int      `json:"vmid"`
 	Status              string   `json:"status"`
@@ -24,12 +27,14 @@ type LXCContainer struct {
 	PID                 *int     `json:"pid,omitempty"`
 }
 
+// LXCConfig is the subset of pct config output that homelabctl cares about.
 type LXCConfig struct {
 	MemoryMB    int
 	BootdiskGB  float64
 	IPAddresses []string
 }
 
+// LXCDiskUsage is parsed from df output inside a running container.
 type LXCDiskUsage struct {
 	FreeGB      float64
 	UsedPercent float64
@@ -46,6 +51,8 @@ const (
 	diskEndMarker     = "__HOMELABCTL_DISK_END__"
 )
 
+// ListLXC fetches, parses, and enriches Proxmox LXC container data.
+// It is the main use-case function behind `homelabctl lxc list`.
 func ListLXC(ctx context.Context, runner Runner) ([]LXCContainer, error) {
 	stdout, err := runner.Run(ctx, buildLXCListCommand())
 	if err != nil {
@@ -132,6 +139,8 @@ done < "$ids"
 `, listBeginMarker, listEndMarker, configBeginMarker, configEndMarker, diskBeginMarker, diskEndMarker, ipBeginMarker, ipEndMarker)
 }
 
+// ParsePCTList converts raw `pct list` text output into LXCContainer values.
+// Optional fields stay zero or nil when Proxmox does not print them.
 func ParsePCTList(output string) ([]LXCContainer, error) {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" {
@@ -228,6 +237,8 @@ func parseRow(fields []string, idx map[string]int) (LXCContainer, error) {
 	return c, nil
 }
 
+// SplitLXCListBatch separates pct list output from the marked detail sections
+// produced by the remote batch shell script.
 func SplitLXCListBatch(output string) (string, string, error) {
 	var listLines []string
 	var detailLines []string
@@ -258,6 +269,7 @@ func SplitLXCListBatch(output string) (string, string, error) {
 	return strings.Join(listLines, "\n"), strings.Join(detailLines, "\n"), nil
 }
 
+// ParseLXCDetails reads marked config/IP/disk sections from the batch output.
 func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, map[int]LXCDiskUsage, error) {
 	rawConfigs := map[int][]string{}
 	rawIPs := map[int][]string{}
@@ -340,6 +352,7 @@ func parseDetailsMarker(line string) (string, int, bool, error) {
 	}
 }
 
+// ParseDiskUsage extracts free GB and used percent from `df -B1 -P /` output.
 func ParseDiskUsage(output string) (LXCDiskUsage, error) {
 	for _, line := range strings.Split(output, "\n") {
 		fields := strings.Fields(line)
@@ -360,6 +373,8 @@ func ParseDiskUsage(output string) (LXCDiskUsage, error) {
 	return LXCDiskUsage{}, fmt.Errorf("disk usage not found")
 }
 
+// ParseLXCConfig extracts memory, rootfs size, and static IPv4 addresses from
+// `pct config <vmid>` output.
 func ParseLXCConfig(output string) (LXCConfig, error) {
 	var cfg LXCConfig
 	for _, line := range strings.Split(output, "\n") {
@@ -450,6 +465,8 @@ func staticIPv4FromNet(value string) []string {
 	return ips
 }
 
+// ParseIPv4Addresses extracts useful IPv4 addresses from `ip -4 -o addr`.
+// Docker bridge interfaces are ignored so the table shows service addresses.
 func ParseIPv4Addresses(output string) []string {
 	var ips []string
 	for _, line := range strings.Split(output, "\n") {
