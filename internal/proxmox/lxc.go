@@ -3,6 +3,7 @@ package proxmox
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -12,19 +13,26 @@ type Runner interface {
 }
 
 type LXCContainer struct {
-	VMID        int      `json:"vmid"`
-	Status      string   `json:"status"`
-	Name        string   `json:"name"`
-	MemoryMB    int      `json:"memory_mb,omitempty"`
-	BootdiskGB  float64  `json:"bootdisk_gb,omitempty"`
-	IPAddresses []string `json:"ip_addresses,omitempty"`
-	PID         *int     `json:"pid,omitempty"`
+	VMID                int      `json:"vmid"`
+	Status              string   `json:"status"`
+	Name                string   `json:"name"`
+	MemoryMB            int      `json:"memory_mb,omitempty"`
+	BootdiskGB          float64  `json:"bootdisk_gb,omitempty"`
+	BootdiskFreeGB      *float64 `json:"bootdisk_free_gb,omitempty"`
+	BootdiskUsedPercent *float64 `json:"bootdisk_used_percent,omitempty"`
+	IPAddresses         []string `json:"ip_addresses,omitempty"`
+	PID                 *int     `json:"pid,omitempty"`
 }
 
 type LXCConfig struct {
 	MemoryMB    int
 	BootdiskGB  float64
 	IPAddresses []string
+}
+
+type LXCDiskUsage struct {
+	FreeGB      float64
+	UsedPercent float64
 }
 
 const (
@@ -34,6 +42,8 @@ const (
 	configEndMarker   = "__HOMELABCTL_CONFIG_END__"
 	ipBeginMarker     = "__HOMELABCTL_IP_BEGIN__"
 	ipEndMarker       = "__HOMELABCTL_IP_END__"
+	diskBeginMarker   = "__HOMELABCTL_DISK_BEGIN__"
+	diskEndMarker     = "__HOMELABCTL_DISK_END__"
 )
 
 func ListLXC(ctx context.Context, runner Runner) ([]LXCContainer, error) {
@@ -53,7 +63,7 @@ func ListLXC(ctx context.Context, runner Runner) ([]LXCContainer, error) {
 		return containers, nil
 	}
 
-	configs, liveIPs, err := ParseLXCDetails(detailsOut)
+	configs, liveIPs, diskUsages, err := ParseLXCDetails(detailsOut)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +78,10 @@ func ListLXC(ctx context.Context, runner Runner) ([]LXCContainer, error) {
 
 		if ips := liveIPs[containers[i].VMID]; len(ips) > 0 {
 			containers[i].IPAddresses = ips
+		}
+		if usage, ok := diskUsages[containers[i].VMID]; ok {
+			containers[i].BootdiskFreeGB = &usage.FreeGB
+			containers[i].BootdiskUsedPercent = &usage.UsedPercent
 		}
 	}
 	return containers, nil
@@ -93,6 +107,11 @@ while read -r vmid status; do
         config="$(pct config "$vmid")"
         printf '%%s\n' "$config"
         echo %s "$vmid"
+        if [ "$status" = "running" ]; then
+          echo %s "$vmid"
+          pct exec "$vmid" -- df -B1 -P / 2>/dev/null || true
+          echo %s "$vmid"
+        fi
         if [ "$status" = "running" ] && ! printf '%%s\n' "$config" | grep -Eq '(^|[,[:space:]])ip=[0-9]+\.'; then
           echo %s "$vmid"
           pct exec "$vmid" -- ip -4 -o addr show scope global 2>/dev/null || true
@@ -110,7 +129,7 @@ while read -r vmid status; do
   [ -n "$vmid" ] || continue
   cat "$tmpdir/$vmid.out"
 done < "$ids"
-`, listBeginMarker, listEndMarker, configBeginMarker, configEndMarker, ipBeginMarker, ipEndMarker)
+`, listBeginMarker, listEndMarker, configBeginMarker, configEndMarker, diskBeginMarker, diskEndMarker, ipBeginMarker, ipEndMarker)
 }
 
 func ParsePCTList(output string) ([]LXCContainer, error) {
@@ -239,16 +258,17 @@ func SplitLXCListBatch(output string) (string, string, error) {
 	return strings.Join(listLines, "\n"), strings.Join(detailLines, "\n"), nil
 }
 
-func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, error) {
+func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, map[int]LXCDiskUsage, error) {
 	rawConfigs := map[int][]string{}
 	rawIPs := map[int][]string{}
+	rawDisks := map[int][]string{}
 
 	section := ""
 	vmid := 0
 	for _, line := range strings.Split(output, "\n") {
 		marker, markerVMID, ok, err := parseDetailsMarker(line)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if ok {
 			switch marker {
@@ -256,7 +276,9 @@ func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, error)
 				section, vmid = "config", markerVMID
 			case ipBeginMarker:
 				section, vmid = "ip", markerVMID
-			case configEndMarker, ipEndMarker:
+			case diskBeginMarker:
+				section, vmid = "disk", markerVMID
+			case configEndMarker, ipEndMarker, diskEndMarker:
 				section, vmid = "", 0
 			}
 			continue
@@ -267,6 +289,8 @@ func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, error)
 			rawConfigs[vmid] = append(rawConfigs[vmid], line)
 		case "ip":
 			rawIPs[vmid] = append(rawIPs[vmid], line)
+		case "disk":
+			rawDisks[vmid] = append(rawDisks[vmid], line)
 		}
 	}
 
@@ -274,7 +298,7 @@ func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, error)
 	for vmid, lines := range rawConfigs {
 		cfg, err := ParseLXCConfig(strings.Join(lines, "\n"))
 		if err != nil {
-			return nil, nil, fmt.Errorf("parse config for VMID %d: %w", vmid, err)
+			return nil, nil, nil, fmt.Errorf("parse config for VMID %d: %w", vmid, err)
 		}
 		configs[vmid] = cfg
 	}
@@ -284,7 +308,16 @@ func ParseLXCDetails(output string) (map[int]LXCConfig, map[int][]string, error)
 		liveIPs[vmid] = ParseIPv4Addresses(strings.Join(lines, "\n"))
 	}
 
-	return configs, liveIPs, nil
+	diskUsages := make(map[int]LXCDiskUsage, len(rawDisks))
+	for vmid, lines := range rawDisks {
+		usage, err := ParseDiskUsage(strings.Join(lines, "\n"))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("parse disk usage for VMID %d: %w", vmid, err)
+		}
+		diskUsages[vmid] = usage
+	}
+
+	return configs, liveIPs, diskUsages, nil
 }
 
 func parseDetailsMarker(line string) (string, int, bool, error) {
@@ -300,11 +333,31 @@ func parseDetailsMarker(line string) (string, int, bool, error) {
 		return "", 0, true, fmt.Errorf("invalid details marker VMID %q", fields[1])
 	}
 	switch fields[0] {
-	case configBeginMarker, configEndMarker, ipBeginMarker, ipEndMarker:
+	case configBeginMarker, configEndMarker, ipBeginMarker, ipEndMarker, diskBeginMarker, diskEndMarker:
 		return fields[0], vmid, true, nil
 	default:
 		return "", 0, true, fmt.Errorf("unknown details marker %q", fields[0])
 	}
+}
+
+func ParseDiskUsage(output string) (LXCDiskUsage, error) {
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 6 || fields[0] == "Filesystem" {
+			continue
+		}
+		availableBytes, err := strconv.ParseFloat(fields[3], 64)
+		if err != nil {
+			return LXCDiskUsage{}, fmt.Errorf("invalid available bytes %q", fields[3])
+		}
+		usedPercent, err := strconv.ParseFloat(strings.TrimSuffix(fields[4], "%"), 64)
+		if err != nil {
+			return LXCDiskUsage{}, fmt.Errorf("invalid used percent %q", fields[4])
+		}
+		freeGB := availableBytes / (1024 * 1024 * 1024)
+		return LXCDiskUsage{FreeGB: math.Round(freeGB*100) / 100, UsedPercent: usedPercent}, nil
+	}
+	return LXCDiskUsage{}, fmt.Errorf("disk usage not found")
 }
 
 func ParseLXCConfig(output string) (LXCConfig, error) {

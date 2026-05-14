@@ -73,6 +73,10 @@ memory: 512
 rootfs: local-lvm:vm-100-disk-0,size=8G
 net0: name=eth0,bridge=vmbr0,ip=dhcp
 __HOMELABCTL_CONFIG_END__ 100
+__HOMELABCTL_DISK_BEGIN__ 100
+Filesystem 1B-blocks Used Available Use% Mounted on
+/dev/loop0 8589934592 2147483648 6442450944 25% /
+__HOMELABCTL_DISK_END__ 100
 __HOMELABCTL_IP_BEGIN__ 100
 2: eth0    inet 10.51.51.100/24 brd 10.51.51.255 scope global eth0
 __HOMELABCTL_IP_END__ 100
@@ -90,6 +94,12 @@ __HOMELABCTL_CONFIG_END__ 101`,
 	if items[0].MemoryMB != 512 || items[0].BootdiskGB != 8 || items[0].IPAddresses[0] != "10.51.51.100" {
 		t.Fatalf("unexpected enriched running container: %+v", items[0])
 	}
+	if items[0].BootdiskFreeGB == nil || *items[0].BootdiskFreeGB != 6 {
+		t.Fatalf("unexpected free disk value: %+v", items[0].BootdiskFreeGB)
+	}
+	if items[0].BootdiskUsedPercent == nil || *items[0].BootdiskUsedPercent != 25 {
+		t.Fatalf("unexpected disk percent value: %+v", items[0].BootdiskUsedPercent)
+	}
 	if items[1].MemoryMB != 1024 || items[1].BootdiskGB != 16 || items[1].IPAddresses[0] != "10.51.51.101" {
 		t.Fatalf("unexpected enriched stopped container: %+v", items[1])
 	}
@@ -102,11 +112,15 @@ __HOMELABCTL_CONFIG_END__ 101`,
 }
 
 func TestParseLXCDetails(t *testing.T) {
-	configs, liveIPs, err := ParseLXCDetails(`__HOMELABCTL_CONFIG_BEGIN__ 100
+	configs, liveIPs, diskUsages, err := ParseLXCDetails(`__HOMELABCTL_CONFIG_BEGIN__ 100
 memory: 512
 rootfs: local-lvm:vm-100-disk-0,size=8G
 net0: name=eth0,bridge=vmbr0,ip=dhcp
 __HOMELABCTL_CONFIG_END__ 100
+__HOMELABCTL_DISK_BEGIN__ 100
+Filesystem 1B-blocks Used Available Use% Mounted on
+/dev/loop0 8589934592 2147483648 6442450944 25% /
+__HOMELABCTL_DISK_END__ 100
 __HOMELABCTL_IP_BEGIN__ 100
 2: eth0    inet 10.51.51.100/24 brd 10.51.51.255 scope global eth0
 __HOMELABCTL_IP_END__ 100`)
@@ -118,6 +132,9 @@ __HOMELABCTL_IP_END__ 100`)
 	}
 	if len(liveIPs[100]) != 1 || liveIPs[100][0] != "10.51.51.100" {
 		t.Fatalf("unexpected live IPs: %+v", liveIPs[100])
+	}
+	if diskUsages[100].FreeGB != 6 || diskUsages[100].UsedPercent != 25 {
+		t.Fatalf("unexpected disk usage: %+v", diskUsages[100])
 	}
 }
 
@@ -153,6 +170,17 @@ net1: name=eth1,bridge=vmbr1,ip=dhcp`)
 	}
 	if len(cfg.IPAddresses) != 1 || cfg.IPAddresses[0] != "10.51.51.20" {
 		t.Fatalf("unexpected ips: %+v", cfg.IPAddresses)
+	}
+}
+
+func TestParseDiskUsage(t *testing.T) {
+	usage, err := ParseDiskUsage(`Filesystem 1B-blocks Used Available Use% Mounted on
+/dev/loop0 8589934592 2147483648 6442450944 25% /`)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if usage.FreeGB != 6 || usage.UsedPercent != 25 {
+		t.Fatalf("unexpected disk usage: %+v", usage)
 	}
 }
 

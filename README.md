@@ -6,7 +6,7 @@
 
 First MVP command: `homelabctl lxc list`
 
-It loads YAML config, runs Proxmox `pct` commands over SSH, enriches the LXC list with memory, root disk size, and IP addresses, then renders table or JSON.
+It loads YAML config, runs Proxmox `pct` commands over SSH, enriches the LXC list with memory, root disk size, free root disk space, usage percentage, and IP addresses, then renders table or JSON.
 
 ## Install
 
@@ -42,9 +42,9 @@ go run ./cmd/homelabctl --config ./config.yaml lxc list --json
 Table:
 
 ```text
-VMID   STATUS    NAME          MEMORY   BOOTDISK   IP            PID
-100    running   caddy         512      8.00       10.51.51.100  1234
-101    stopped   navidrome     1024     16.00      10.51.51.101  -
+VMID   STATUS    NAME          MEMORY   BOOTDISK   FREE   USE%   IP            PID
+100    running   caddy         512      8.00       6.50   19%    10.51.51.100  1234
+101    stopped   navidrome     1024     16.00      -      -      10.51.51.101  -
 ```
 
 JSON:
@@ -57,6 +57,8 @@ JSON:
     "name": "caddy",
     "memory_mb": 512,
     "bootdisk_gb": 8,
+    "bootdisk_free_gb": 6.5,
+    "bootdisk_used_percent": 19,
     "ip_addresses": [
       "10.51.51.100"
     ],

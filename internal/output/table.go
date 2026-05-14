@@ -11,7 +11,7 @@ import (
 
 func WriteLXCTable(w io.Writer, items []proxmox.LXCContainer) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "VMID\tSTATUS\tNAME\tMEMORY\tBOOTDISK\tIP\tPID")
+	fmt.Fprintln(tw, "VMID\tSTATUS\tNAME\tMEMORY\tBOOTDISK\tFREE\tUSE%\tIP\tPID")
 	for _, c := range items {
 		pid := "-"
 		if c.PID != nil {
@@ -21,7 +21,15 @@ func WriteLXCTable(w io.Writer, items []proxmox.LXCContainer) {
 		if len(c.IPAddresses) > 0 {
 			ip = strings.Join(c.IPAddresses, ",")
 		}
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%d\t%.2f\t%s\t%s\n", c.VMID, c.Status, c.Name, c.MemoryMB, c.BootdiskGB, ip, pid)
+		free := "-"
+		if c.BootdiskFreeGB != nil {
+			free = fmt.Sprintf("%.2f", *c.BootdiskFreeGB)
+		}
+		usedPercent := "-"
+		if c.BootdiskUsedPercent != nil {
+			usedPercent = fmt.Sprintf("%.0f%%", *c.BootdiskUsedPercent)
+		}
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%d\t%.2f\t%s\t%s\t%s\t%s\n", c.VMID, c.Status, c.Name, c.MemoryMB, c.BootdiskGB, free, usedPercent, ip, pid)
 	}
 	_ = tw.Flush()
 }
